@@ -3,6 +3,7 @@ package httpserver;
 import javax.swing.*;
 import java.net.*;
 import java.io.*;
+import java.util.Calendar;
 import java.util.regex.*;
 
 /**
@@ -72,7 +73,6 @@ public class HTTPserver {
         public void run() {
             try {
                 readInputHeaders();
-                writeResponse("<html><body><h1>Hello you</h1></body></html>");
             } catch (Throwable t) {
                 /*do nothing*/
             } finally {
@@ -85,17 +85,15 @@ public class HTTPserver {
             System.out.println("Client processing finished");
         }
 
-        private void writeResponse(String s) throws Throwable {
-            String response = "HTTP/1.1 200 OK\r\n" +
+        private String writeHeader(String s, int code, String description){
+            String response = "HTTP/1.1 "+ code + " " + description + "\r\n" +
+                    "Date: "+ Calendar.getInstance().getTime() +"\r\n" +
                     "Server: LisaServer\r\n" +
+                    "Last-Modified: \r\n" +
                     "Content-Type: text/html\r\n" +
                     "Content-Length: " + s.length() + "\r\n" +
                     "Connection: close\r\n\r\n";
-            String result = response + s;
-            os.write(result.getBytes());
-            os.flush();
-            textArea.append("\n\n SERVER RESPONSE \n");
-            textArea.append(result);
+            return response;
         }
 
         private void readInputHeaders() throws Throwable {
@@ -112,30 +110,57 @@ public class HTTPserver {
         }
 
         public void parseLine(String s){
-            Pattern pattern = Pattern.compile("GET (.*) HTTP/1.1");
+            Pattern pattern = Pattern.compile("GET\\s(.*)\\sHTTP/1.1");
+            Pattern patternHead = Pattern.compile("HEAD\\s(.*)\\sHTTP/1.1");
+            Pattern patternPost = Pattern.compile("POST\\s(.*)\\sHTTP/1.1");
             Matcher matcher = pattern.matcher(s);
-            if (matcher.matches()){
+            if (matcher.matches() && matcher.group(1) != "/favicon.ico"){
                 System.out.println("Matches: " + matcher.group());
-                System.out.println(matcher.groupCount() + " " +matcher.group(1));
-                tryToFind("./src/files", "first.html");
+                System.out.println(matcher.groupCount() + " " + matcher.group(1));
+                getFunction("./src/files", matcher.group(1));
+            }else if((matcher = patternHead.matcher(s)).matches()) {
+                System.out.println("Matches: " + matcher.group());
+                System.out.println(matcher.groupCount() + " " + matcher.group(1));
+                headFunction("./src/files", matcher.group(1));
+            }else if((matcher = patternPost.matcher(s)).matches()){
+                System.out.println("Matches: " + matcher.group());
+                System.out.println(matcher.groupCount() + " " + matcher.group(1));
+                postFunction();
             }
         }
 
-        public void tryToFind(String dir, String fname){
+        public void getFunction(String dir, String fname){
             File file = new File(dir, fname);
+            if(file.exists() && !file.isDirectory()) {
+               sendFile(file, 200, "OK");
+            } else {
+                File file2 = new File("./src/files", "/sorry.html");
+                sendFile(file2, 404, "FILE NOT FOUND");
+            }
 
+        }
+        public void sendFile(File file, int code, String description){
             try(    FileInputStream fis = new FileInputStream(file);
                     BufferedInputStream bis = new BufferedInputStream(fis)){
                 byte [] mybytearray  = new byte [(int)file.length()];
                 bis.read(mybytearray,0,mybytearray.length);
-                os.write(mybytearray,0,mybytearray.length);
+                String s = new String(mybytearray);
+                String result = (writeHeader(s, code, description) + s);
+                os.write(result.getBytes());
                 os.flush();
-                textArea.append(mybytearray.toString());
+                textArea.append("RESPONSE:\n" + result);
                 System.out.println("Done.");
             }catch (Exception ex){
-                System.out.println("Sorry( couldn't find your file");
-                //ex.printStackTrace();
+                ex.printStackTrace();
             }
+        }
+
+        public void headFunction(String dir, String fname){
+
+        }
+
+        public void postFunction(){
+
         }
     }
 }
